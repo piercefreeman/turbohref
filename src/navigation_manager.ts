@@ -1,4 +1,4 @@
-import { PageManager } from './PageManager';
+import { PageManager } from './page_manager';
 
 export interface VisitOptions {
     partialReplace?: boolean;
@@ -8,25 +8,93 @@ export interface VisitOptions {
     callback?: () => void;
 }
 
+interface NavigationManagerOptions {
+    color?: string;
+    height?: number;
+}
+
 export class NavigationManager {
     private currentRequest: AbortController | null = null;
     private pageManager: PageManager;
     private isTestEnvironment: boolean;
+    private progressBar: HTMLDivElement;
+    private color: string;
+    private height: number;
 
-    constructor(pageManager: PageManager) {
+    constructor(pageManager: PageManager, options: NavigationManagerOptions = {}) {
         this.pageManager = pageManager;
         this.isTestEnvironment = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
+        this.color = options.color || 'rgb(0, 118, 255)';
+        this.height = options.height || 3;
+        this.progressBar = this.createProgressBar();
+    }
+
+    private createProgressBar(): HTMLDivElement {
+        const bar = document.createElement('div');
+        Object.assign(bar.style, {
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: '0%',
+            height: `${this.height}px`,
+            backgroundColor: this.color,
+            transition: 'width 0.2s ease',
+            zIndex: '9999',
+        });
+        return bar;
     }
 
     public start(): void {
+        // Mount the progress bar if not already mounted
+        if (!document.body.contains(this.progressBar)) {
+            document.body.appendChild(this.progressBar);
+        }
+
+        // Start navigation event listeners
         window.addEventListener('popstate', this.handlePopState.bind(this));
         window.addEventListener('turbohref:click', ((event: CustomEvent) => {
             this.visit(event.detail.url);
         }) as EventListener);
+
+        // Listen for turbohref events to show/hide progress
+        document.addEventListener('turbohref:before-render', () => {
+            this.showProgress();
+        });
+
+        document.addEventListener('turbohref:render', () => {
+            this.completeProgress();
+        });
     }
 
     public stop(): void {
         window.removeEventListener('popstate', this.handlePopState.bind(this));
+        this.progressBar.remove();
+    }
+
+    private showProgress(): void {
+        // Reset to 0 and then quickly animate to 80%
+        this.progressBar.style.width = '0%';
+        // Force a reflow to ensure the animation works
+        this.progressBar.offsetHeight;
+        this.progressBar.style.width = '80%';
+    }
+
+    private completeProgress(): void {
+        // Quickly animate to 100% and then fade out
+        this.progressBar.style.width = '100%';
+        
+        setTimeout(() => {
+            // Add opacity transition
+            this.progressBar.style.transition = 'width 0.2s ease, opacity 0.2s ease';
+            this.progressBar.style.opacity = '0';
+            
+            // Reset after animation
+            setTimeout(() => {
+                this.progressBar.style.width = '0%';
+                this.progressBar.style.opacity = '1';
+                this.progressBar.style.transition = 'width 0.2s ease';
+            }, 200);
+        }, 200);
     }
 
     public async visit(url: string, options: VisitOptions = {}): Promise<void> {

@@ -40,23 +40,16 @@ export class PageManager {
         }
     }
     async updateMatchingElements(newDocument, keys) {
-        var _a, _b, _c;
         for (const key of keys) {
             const selector = `[data-turbohref-refresh="${key}"]`;
             const elements = document.querySelectorAll(selector);
             const newElements = newDocument.querySelectorAll(selector);
-            console.log('Updating elements with key:', key);
-            console.log('Current elements:', elements.length);
-            console.log('New elements:', newElements.length);
-            console.log('Current content:', (_a = elements[0]) === null || _a === void 0 ? void 0 : _a.textContent);
-            console.log('New content:', (_b = newElements[0]) === null || _b === void 0 ? void 0 : _b.textContent);
             elements.forEach((element, index) => {
                 const newElement = newElements[index];
                 if (newElement) {
                     element.replaceWith(newElement.cloneNode(true));
                 }
             });
-            console.log('After update content:', (_c = document.querySelector(selector)) === null || _c === void 0 ? void 0 : _c.textContent);
         }
     }
     async updateExceptElements(newDocument, keys) {
@@ -113,6 +106,5 @@ export class PageManager {
         return document.dispatchEvent(event);
     }
 }
-PageManager.REFRESH_SELECTOR = '[data-turbohref-refresh]';
 PageManager.PERMANENT_SELECTOR = '[data-turbohref-permanent]';
 //# sourceMappingURL=PageManager.js.map

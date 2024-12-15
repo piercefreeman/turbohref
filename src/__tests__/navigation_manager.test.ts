@@ -1,5 +1,5 @@
-import { NavigationManager } from '../NavigationManager';
-import { PageManager } from '../PageManager';
+import { NavigationManager } from '../navigation_manager';
+import { PageManager } from '../page_manager';
 
 describe('NavigationManager', () => {
     let navigationManager: NavigationManager;

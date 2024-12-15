@@ -8,7 +8,7 @@
       import { TurboHref } from '../dist/index.mjs';
 
       const turbo = new TurboHref();
-      turbo.activate();
+      turbo.start();
     </script>
     <script>
       window.siteConfig = window.siteConfig || {
@@ -30,6 +30,8 @@
         const configDisplay = document.getElementById('config-display');
         configDisplay.textContent = `Site Version: ${window.siteConfig.version} | Last Updated: ${window.siteConfig.lastUpdated}`;
       }, 500);
+
+      console.log("Second page loaded...");
     </script>
     <style>
       body {

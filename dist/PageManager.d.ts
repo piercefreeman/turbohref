@@ -1,5 +1,4 @@
 export declare class PageManager {
-    private static readonly REFRESH_SELECTOR;
     private static readonly PERMANENT_SELECTOR;
     update(newDocument: Document, options?: UpdateOptions): Promise<void>;
     private performPartialUpdate;

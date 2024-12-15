@@ -1,4 +1,4 @@
-import { ClickHandler } from '../ClickHandler';
+import { ClickHandler } from '../click_handler';
 
 describe('ClickHandler', () => {
     let clickHandler: ClickHandler;

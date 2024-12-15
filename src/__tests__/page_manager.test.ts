@@ -1,4 +1,4 @@
-import { PageManager } from '../PageManager';
+import { PageManager } from '../page_manager';
 
 describe('PageManager', () => {
     let pageManager: PageManager;

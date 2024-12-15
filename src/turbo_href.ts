@@ -1,6 +1,6 @@
-import { ClickHandler } from "./ClickHandler";
-import { NavigationManager } from "./NavigationManager";
-import { PageManager } from "./PageManager";
+import { ClickHandler } from "./click_handler";
+import { NavigationManager } from "./navigation_manager";
+import { PageManager } from "./page_manager";
 
 export class TurboHref {
     private static instance: TurboHref | null = null;
