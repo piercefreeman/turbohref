@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Product Detail</title>
+    <script type="module">
+      import { TurboHref } from '../dist/index.mjs';
+
+      const turbo = new TurboHref();
+      turbo.activate();
+    </script>
+    <script>
+      window.siteConfig = window.siteConfig || {
+        version: '1.0.0',
+        lastUpdated: new Date().toISOString(),
+        environment: 'production',
+      };
+
+      document.addEventListener('DOMContentLoaded', () => {
+        // Get the product ID from URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        const productId = urlParams.get('id');
+        const productTitle = document.getElementById('product-title');
+        productTitle.textContent = `Product Details #${productId}`;
+      });
+
+      // Every 500ms, update teh rendering of the site config
+      setInterval(() => {
+        const configDisplay = document.getElementById('config-display');
+        configDisplay.textContent = `Site Version: ${window.siteConfig.version} | Last Updated: ${window.siteConfig.lastUpdated}`;
+      }, 500);
+    </script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .product-container {
+        border: 1px solid #ddd;
+        padding: 20px;
+        border-radius: 8px;
+        margin-top: 20px;
+      }
+      #config-display {
+        background: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+        font-size: 0.9em;
+        color: #666;
+      }
+      .back-link {
+        display: inline-block;
+        margin-bottom: 20px;
+        color: #0066cc;
+        text-decoration: none;
+      }
+      .back-link:hover {
+        text-decoration: underline;
+      }
+      h1 {
+        color: #333;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <a href="home.html" class="back-link">← Back to Home</a>
+    <h1 id="product-title">Product Details</h1>
+    <div id="config-display"></div>
+    <div class="product-container">
+      <p>
+        This is a detailed view of the product. The specific product ID is
+        extracted from the URL parameters and displayed in the title.
+      </p>
+      <p>
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod
+        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+        veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+        commodo consequat.
+      </p>
+    </div>
+  </body>
+</html>
