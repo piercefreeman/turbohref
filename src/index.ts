@@ -1,1 +1,2 @@
-export { TurboHref } from './TurboHref';
+export { TurboHref } from './turbo_href';
+export { TurboEvent } from './events';

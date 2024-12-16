@@ -20,14 +20,46 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
+  TurboEvent: () => TurboEvent,
   TurboHref: () => TurboHref
 });
 module.exports = __toCommonJS(src_exports);
 
-// src/ClickHandler.ts
+// src/events.ts
+var TurboEvent = /* @__PURE__ */ ((TurboEvent2) => {
+  TurboEvent2["BeforeVisit"] = "turbohref:before-visit";
+  TurboEvent2["Visit"] = "turbohref:visit";
+  TurboEvent2["BeforeRender"] = "turbohref:before-render";
+  TurboEvent2["Render"] = "turbohref:render";
+  TurboEvent2["Error"] = "turbohref:error";
+  TurboEvent2["FallbackNavigation"] = "turbohref:fallback-navigation";
+  TurboEvent2["Click"] = "turbohref:click";
+  TurboEvent2["Ready"] = "turbohref:ready";
+  TurboEvent2["BeforeRequest"] = "turbohref:before-request";
+  return TurboEvent2;
+})(TurboEvent || {});
+var Events = class {
+  trigger(eventName, detail = {}) {
+    const event = new CustomEvent(eventName, {
+      bubbles: true,
+      cancelable: true,
+      detail
+    });
+    return document.dispatchEvent(event);
+  }
+  on(eventName, handler) {
+    document.addEventListener(eventName, handler);
+  }
+  off(eventName, handler) {
+    document.removeEventListener(eventName, handler);
+  }
+};
+
+// src/click_handler.ts
 var _ClickHandler = class {
   constructor() {
     this.boundClickHandler = this.handleClick.bind(this);
+    this.events = new Events();
   }
   start() {
     document.addEventListener("click", this.boundClickHandler, true);
@@ -45,7 +77,7 @@ var _ClickHandler = class {
     const isModified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
     if (isSameOrigin && isLeftClick && !isModified) {
       event.preventDefault();
-      this.triggerEvent("turbohref:click", { url: url.toString(), link });
+      this.events.trigger("turbohref:click" /* Click */, { url: url.toString(), link });
     }
   }
   findLinkFromClickTarget(event) {
@@ -53,19 +85,11 @@ var _ClickHandler = class {
     const link = target.closest(_ClickHandler.CLICK_SELECTOR);
     return link;
   }
-  triggerEvent(name, detail = {}) {
-    const event = new CustomEvent(name, {
-      bubbles: true,
-      cancelable: true,
-      detail
-    });
-    return document.dispatchEvent(event);
-  }
 };
 var ClickHandler = _ClickHandler;
 ClickHandler.CLICK_SELECTOR = "a[href]:not([target]):not([download]):not([data-turbohref-ignore])";
 
-// src/NavigationManager.ts
+// src/navigation_manager.ts
 var NavigationManager = class {
   constructor(pageManager, options = {}) {
     this.currentRequest = null;
@@ -74,6 +98,7 @@ var NavigationManager = class {
     this.color = options.color || "rgb(0, 118, 255)";
     this.height = options.height || 3;
     this.progressBar = this.createProgressBar();
+    this.events = new Events();
   }
   createProgressBar() {
     const bar = document.createElement("div");
@@ -94,13 +119,13 @@ var NavigationManager = class {
       document.body.appendChild(this.progressBar);
     }
     window.addEventListener("popstate", this.handlePopState.bind(this));
-    window.addEventListener("turbohref:click", (event) => {
+    window.addEventListener("turbohref:click" /* Click */, (event) => {
       this.visit(event.detail.url);
     });
-    document.addEventListener("turbohref:before-render", () => {
+    this.events.on("turbohref:before-render" /* BeforeRender */, () => {
       this.showProgress();
     });
-    document.addEventListener("turbohref:render", () => {
+    this.events.on("turbohref:render" /* Render */, () => {
       this.completeProgress();
     });
   }
@@ -126,45 +151,61 @@ var NavigationManager = class {
     }, 200);
   }
   async visit(url, options = {}) {
-    if (!this.triggerEvent("turbohref:before-visit", { url })) {
+    if (!this.events.trigger("turbohref:before-visit" /* BeforeVisit */, { url })) {
       return;
     }
     if (this.currentRequest) {
       this.currentRequest.abort();
+      this.currentRequest = null;
     }
-    this.currentRequest = new AbortController();
+    const thisRequest = new AbortController();
+    this.currentRequest = thisRequest;
     try {
-      const response = await this.fetchPage(url, this.currentRequest.signal);
+      if (this.currentRequest !== thisRequest) {
+        return;
+      }
+      const response = await this.fetchPage(url, thisRequest.signal);
+      if (this.currentRequest !== thisRequest) {
+        return;
+      }
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const html = await response.text();
+      if (this.currentRequest !== thisRequest) {
+        return;
+      }
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, "text/html");
       await this.pageManager.update(doc, options);
       if (!options.partialReplace) {
         window.history.pushState({ turbohref: true }, "", url);
       }
-      this.triggerEvent("turbohref:visit", { url });
+      this.events.trigger("turbohref:visit" /* Visit */, { url });
       if (options.callback) {
         options.callback();
       }
     } catch (error) {
+      if (this.currentRequest !== thisRequest) {
+        return;
+      }
       if (error instanceof Error && error.name === "AbortError") {
         return;
       }
-      this.triggerEvent("turbohref:error", { error });
+      this.events.trigger("turbohref:error" /* Error */, { error });
       if (this.isTestEnvironment) {
-        this.triggerEvent("turbohref:fallback-navigation", { url });
+        this.events.trigger("turbohref:fallback-navigation" /* FallbackNavigation */, { url });
       } else {
         window.location.href = url;
       }
     } finally {
-      this.currentRequest = null;
+      if (this.currentRequest === thisRequest) {
+        this.currentRequest = null;
+      }
     }
   }
   async fetchPage(url, signal) {
-    return fetch(url, {
+    let fetchOptions = {
       method: "GET",
       headers: {
         "Accept": "text/html, application/xhtml+xml",
@@ -172,6 +213,57 @@ var NavigationManager = class {
       },
       credentials: "same-origin",
       signal
+    };
+    this.events.trigger("turbohref:before-request" /* BeforeRequest */, {
+      url,
+      options: fetchOptions,
+      setOptions: (newOptions) => {
+        fetchOptions = {
+          ...fetchOptions,
+          ...newOptions,
+          // Ensure signal can't be overridden
+          signal,
+          // Merge headers if both exist
+          headers: {
+            ...fetchOptions.headers,
+            ...newOptions.headers || {}
+          }
+        };
+      }
+    });
+    const response = await fetch(url, fetchOptions);
+    const contentLength = response.headers.get("content-length");
+    if (!contentLength) {
+      return response;
+    }
+    const total = parseInt(contentLength, 10);
+    let loaded = 0;
+    const progressBar = this.progressBar;
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = response.body.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              controller.close();
+              break;
+            }
+            loaded += value.length;
+            const progress = loaded / total * 100;
+            const adjustedProgress = progress * 0.8;
+            progressBar.style.width = `${adjustedProgress}%`;
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          controller.error(error);
+        }
+      }
+    });
+    return new Response(stream, {
+      headers: response.headers,
+      status: response.status,
+      statusText: response.statusText
     });
   }
   handlePopState(event) {
@@ -180,39 +272,14 @@ var NavigationManager = class {
       this.visit(window.location.href);
     }
   }
-  triggerEvent(name, detail = {}) {
-    const event = new CustomEvent(name, {
-      bubbles: true,
-      cancelable: true,
-      detail
-    });
-    return document.dispatchEvent(event);
-  }
 };
 
-// src/PageManager.ts
+// src/page_manager.ts
 var _PageManager = class {
   constructor() {
     this.executedScripts = /* @__PURE__ */ new Set();
-    this.mounted = false;
-    this.clickHandler = null;
     this.trackExistingScripts();
-  }
-  mount() {
-    if (this.mounted) {
-      return;
-    }
-    this.clickHandler = (event) => {
-    };
-    document.addEventListener("click", this.clickHandler);
-    this.mounted = true;
-  }
-  unmount() {
-    if (this.clickHandler) {
-      document.removeEventListener("click", this.clickHandler);
-      this.clickHandler = null;
-    }
-    this.mounted = false;
+    this.events = new Events();
   }
   async update(newDocument, options = {}) {
     console.log("Starting page update...", {
@@ -220,8 +287,7 @@ var _PageManager = class {
       onlyKeys: options.onlyKeys,
       exceptKeys: options.exceptKeys
     });
-    this.unmount();
-    this.triggerEvent("turbohref:before-render");
+    this.events.trigger("turbohref:before-render" /* BeforeRender */);
     if (options.partialReplace) {
       console.log("Performing partial update...");
       await this.performPartialUpdate(newDocument, options);
@@ -229,11 +295,10 @@ var _PageManager = class {
       console.log("Performing full page update...");
       await this.performFullUpdate(newDocument);
     }
-    this.triggerEvent("turbohref:render");
+    this.events.trigger("turbohref:render" /* Render */);
     this.executeScripts();
     this.updateScrollPosition();
     console.log("Page update complete");
-    this.mount();
   }
   trackExistingScripts() {
     const scripts = Array.from(document.getElementsByTagName("script"));
@@ -346,24 +411,17 @@ var _PageManager = class {
       window.scrollTo(0, 0);
     }
   }
-  triggerEvent(name, detail = {}) {
-    const event = new CustomEvent(name, {
-      bubbles: true,
-      cancelable: true,
-      detail
-    });
-    return document.dispatchEvent(event);
-  }
 };
 var PageManager = _PageManager;
 PageManager.PERMANENT_SELECTOR = "[data-turbohref-permanent]";
 
-// src/TurboHref.ts
+// src/turbo_href.ts
 var _TurboHref = class {
   constructor() {
     this.clickHandler = new ClickHandler();
     this.pageManager = new PageManager();
     this.navigationManager = new NavigationManager(this.pageManager);
+    this.events = new Events();
   }
   static getInstance() {
     if (!_TurboHref.instance) {
@@ -374,7 +432,7 @@ var _TurboHref = class {
   start() {
     this.clickHandler.start();
     this.navigationManager.start();
-    this.triggerEvent("turbohref:ready");
+    this.events.trigger("turbohref:ready" /* Ready */);
   }
   stop() {
     this.clickHandler.stop();
@@ -383,18 +441,11 @@ var _TurboHref = class {
   visit(url, options = {}) {
     this.navigationManager.visit(url, options);
   }
-  triggerEvent(name, detail = {}) {
-    const event = new CustomEvent(name, {
-      bubbles: true,
-      cancelable: true,
-      detail
-    });
-    return document.dispatchEvent(event);
-  }
 };
 var TurboHref = _TurboHref;
 TurboHref.instance = null;
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  TurboEvent,
   TurboHref
 });

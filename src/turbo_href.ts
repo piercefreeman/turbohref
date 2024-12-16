@@ -10,7 +10,7 @@ export class TurboHref {
     private navigationManager: NavigationManager;
     private events: Events;
 
-    private constructor() {
+    constructor() {
         this.clickHandler = new ClickHandler();
         this.pageManager = new PageManager();
         this.navigationManager = new NavigationManager(this.pageManager);
