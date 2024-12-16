@@ -1,4 +1,5 @@
 import { PageManager } from '../page_manager';
+import { TurboEvent } from '../turbo_event';
 
 describe('PageManager', () => {
     let pageManager: PageManager;
@@ -199,13 +200,13 @@ describe('PageManager', () => {
 
             expect(dispatchEventSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    type: 'turbohref:before-render'
+                    type: TurboEvent.BeforeRender
                 })
             );
 
             expect(dispatchEventSpy).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    type: 'turbohref:render'
+                    type: TurboEvent.Render
                 })
             );
         });

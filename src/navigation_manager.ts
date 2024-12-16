@@ -1,4 +1,5 @@
 import { PageManager } from './page_manager';
+import { Events, TurboEvent } from './events';
 
 export interface VisitOptions {
     partialReplace?: boolean;
@@ -20,6 +21,7 @@ export class NavigationManager {
     private progressBar: HTMLDivElement;
     private color: string;
     private height: number;
+    private events: Events;
 
     constructor(pageManager: PageManager, options: NavigationManagerOptions = {}) {
         this.pageManager = pageManager;
@@ -27,6 +29,7 @@ export class NavigationManager {
         this.color = options.color || 'rgb(0, 118, 255)';
         this.height = options.height || 3;
         this.progressBar = this.createProgressBar();
+        this.events = new Events();
     }
 
     private createProgressBar(): HTMLDivElement {
@@ -52,16 +55,16 @@ export class NavigationManager {
 
         // Start navigation event listeners
         window.addEventListener('popstate', this.handlePopState.bind(this));
-        window.addEventListener('turbohref:click', ((event: CustomEvent) => {
+        window.addEventListener(TurboEvent.Click, ((event: CustomEvent) => {
             this.visit(event.detail.url);
         }) as EventListener);
 
         // Listen for turbohref events to show/hide progress
-        document.addEventListener('turbohref:before-render', () => {
+        this.events.on(TurboEvent.BeforeRender, () => {
             this.showProgress();
         });
 
-        document.addEventListener('turbohref:render', () => {
+        this.events.on(TurboEvent.Render, () => {
             this.completeProgress();
         });
     }
@@ -98,24 +101,43 @@ export class NavigationManager {
     }
 
     public async visit(url: string, options: VisitOptions = {}): Promise<void> {
-        if (!this.triggerEvent('turbohref:before-visit', { url })) {
+        if (!this.events.trigger(TurboEvent.BeforeVisit, { url })) {
             return;
         }
 
         // Cancel any in-flight requests
         if (this.currentRequest) {
             this.currentRequest.abort();
+            this.currentRequest = null;
         }
 
-        this.currentRequest = new AbortController();
+        const thisRequest = new AbortController();
+        this.currentRequest = thisRequest;
 
         try {
-            const response = await this.fetchPage(url, this.currentRequest.signal);
+            // If this request is no longer current, don't proceed
+            if (this.currentRequest !== thisRequest) {
+                return;
+            }
+
+            const response = await this.fetchPage(url, thisRequest.signal);
+            
+            // Check again if this request is still current
+            if (this.currentRequest !== thisRequest) {
+                return;
+            }
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const html = await response.text();
+            
+            // Check one more time before processing the response
+            if (this.currentRequest !== thisRequest) {
+                return;
+            }
+
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
 
@@ -125,30 +147,37 @@ export class NavigationManager {
                 window.history.pushState({ turbohref: true }, '', url);
             }
 
-            this.triggerEvent('turbohref:visit', { url });
+            this.events.trigger(TurboEvent.Visit, { url });
             
             if (options.callback) {
                 options.callback();
             }
         } catch (error) {
+            // Only handle errors for the current request
+            if (this.currentRequest !== thisRequest) {
+                return;
+            }
+
             if (error instanceof Error && error.name === 'AbortError') {
                 return;
             }
-            this.triggerEvent('turbohref:error', { error });
+            this.events.trigger(TurboEvent.Error, { error: error as Error });
             
             // In test environment, just trigger an event instead of actual navigation
             if (this.isTestEnvironment) {
-                this.triggerEvent('turbohref:fallback-navigation', { url });
+                this.events.trigger(TurboEvent.FallbackNavigation, { url });
             } else {
                 window.location.href = url;
             }
         } finally {
-            this.currentRequest = null;
+            if (this.currentRequest === thisRequest) {
+                this.currentRequest = null;
+            }
         }
     }
 
     private async fetchPage(url: string, signal: AbortSignal): Promise<Response> {
-        return fetch(url, {
+        let fetchOptions: RequestInit = {
             method: 'GET',
             headers: {
                 'Accept': 'text/html, application/xhtml+xml',
@@ -156,6 +185,74 @@ export class NavigationManager {
             },
             credentials: 'same-origin',
             signal
+        };
+
+        // Allow users to modify the fetch options
+        this.events.trigger(TurboEvent.BeforeRequest, {
+            url,
+            options: fetchOptions,
+            setOptions: (newOptions: Partial<RequestInit>) => {
+                // Merge the new options, preserving the signal
+                fetchOptions = {
+                    ...fetchOptions,
+                    ...newOptions,
+                    // Ensure signal can't be overridden
+                    signal,
+                    // Merge headers if both exist
+                    headers: {
+                        ...fetchOptions.headers,
+                        ...(newOptions.headers || {}),
+                    }
+                };
+            }
+        });
+
+        const response = await fetch(url, fetchOptions);
+
+        // Get the total size from content-length header
+        const contentLength = response.headers.get('content-length');
+        
+        // If we can't get the content length, return the original response
+        if (!contentLength) {
+            return response;
+        }
+
+        const total = parseInt(contentLength, 10);
+        let loaded = 0;
+
+        // Create a new ReadableStream to track progress
+        const progressBar = this.progressBar;
+        const stream = new ReadableStream({
+            async start(controller) {
+                const reader = response.body!.getReader();
+                
+                try {
+                    while (true) {
+                        const {done, value} = await reader.read();
+                        
+                        if (done) {
+                            controller.close();
+                            break;
+                        }
+
+                        loaded += value.length;
+                        const progress = (loaded / total) * 100;
+                        // Update progress bar - interpolate between 0-80%
+                        const adjustedProgress = (progress * 0.8);
+                        progressBar.style.width = `${adjustedProgress}%`;
+                        
+                        controller.enqueue(value);
+                    }
+                } catch (error) {
+                    controller.error(error);
+                }
+            }
+        });
+
+        return new Response(stream, {
+            headers: response.headers,
+            status: response.status,
+            statusText: response.statusText
         });
     }
 
@@ -163,14 +260,5 @@ export class NavigationManager {
         if (event.state?.turbohref) {
             this.visit(window.location.href);
         }
-    }
-
-    private triggerEvent(name: string, detail: any = {}): boolean {
-        const event = new CustomEvent(name, {
-            bubbles: true,
-            cancelable: true,
-            detail
-        });
-        return document.dispatchEvent(event);
     }
 } 

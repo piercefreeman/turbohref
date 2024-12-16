@@ -1,4 +1,5 @@
 import { ClickHandler } from '../click_handler';
+import { TurboEvent } from '../events';
 
 describe('ClickHandler', () => {
     let clickHandler: ClickHandler;
@@ -30,7 +31,7 @@ describe('ClickHandler', () => {
 
         expect(dispatchEventSpy).toHaveBeenCalledWith(
             expect.objectContaining({
-                type: 'turbohref:click',
+                type: TurboEvent.Click,
                 detail: expect.objectContaining({
                     url: expect.stringContaining('/page1'),
                     link

@@ -1,17 +1,20 @@
 import { ClickHandler } from "./click_handler";
 import { NavigationManager } from "./navigation_manager";
 import { PageManager } from "./page_manager";
+import { Events, TurboEvent } from "./events";
 
 export class TurboHref {
     private static instance: TurboHref | null = null;
     private clickHandler: ClickHandler;
     private pageManager: PageManager;
     private navigationManager: NavigationManager;
+    private events: Events;
 
     private constructor() {
         this.clickHandler = new ClickHandler();
         this.pageManager = new PageManager();
         this.navigationManager = new NavigationManager(this.pageManager);
+        this.events = new Events();
     }
 
     public static getInstance(): TurboHref {
@@ -24,7 +27,7 @@ export class TurboHref {
     public start(): void {
         this.clickHandler.start();
         this.navigationManager.start();
-        this.triggerEvent('turbohref:ready');
+        this.events.trigger(TurboEvent.Ready);
     }
 
     public stop(): void {
@@ -34,15 +37,6 @@ export class TurboHref {
 
     public visit(url: string, options: VisitOptions = {}): void {
         this.navigationManager.visit(url, options);
-    }
-
-    private triggerEvent(name: string, detail: any = {}): boolean {
-        const event = new CustomEvent(name, {
-            bubbles: true,
-            cancelable: true,
-            detail
-        });
-        return document.dispatchEvent(event);
     }
 }
 

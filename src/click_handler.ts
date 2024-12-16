@@ -1,9 +1,13 @@
+import { Events, TurboEvent } from './events';
+
 export class ClickHandler {
     private static readonly CLICK_SELECTOR = 'a[href]:not([target]):not([download]):not([data-turbohref-ignore])';
     private boundClickHandler: (event: MouseEvent) => void;
+    private events: Events;
 
     constructor() {
         this.boundClickHandler = this.handleClick.bind(this);
+        this.events = new Events();
     }
 
     public start(): void {
@@ -25,7 +29,7 @@ export class ClickHandler {
 
         if (isSameOrigin && isLeftClick && !isModified) {
             event.preventDefault();
-            this.triggerEvent('turbohref:click', { url: url.toString(), link });
+            this.events.trigger(TurboEvent.Click, { url: url.toString(), link });
         }
     }
 
@@ -33,14 +37,5 @@ export class ClickHandler {
         const target = event.target as HTMLElement;
         const link = target.closest(ClickHandler.CLICK_SELECTOR);
         return link as HTMLAnchorElement;
-    }
-
-    private triggerEvent(name: string, detail: any = {}): boolean {
-        const event = new CustomEvent(name, {
-            bubbles: true,
-            cancelable: true,
-            detail
-        });
-        return document.dispatchEvent(event);
     }
 } 

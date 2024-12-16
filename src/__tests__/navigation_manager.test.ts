@@ -1,5 +1,6 @@
 import { NavigationManager } from '../navigation_manager';
 import { PageManager } from '../page_manager';
+import { TurboEvent } from '../events';
 
 describe('NavigationManager', () => {
     let navigationManager: NavigationManager;
@@ -57,7 +58,7 @@ describe('NavigationManager', () => {
 
         expect(dispatchEventSpy).toHaveBeenCalledWith(
             expect.objectContaining({
-                type: 'turbohref:visit'
+                type: TurboEvent.Visit
             })
         );
 
@@ -79,13 +80,13 @@ describe('NavigationManager', () => {
 
         expect(dispatchEventSpy).toHaveBeenCalledWith(
             expect.objectContaining({
-                type: 'turbohref:error'
+                type: TurboEvent.Error
             })
         );
 
         expect(dispatchEventSpy).toHaveBeenCalledWith(
             expect.objectContaining({
-                type: 'turbohref:fallback-navigation',
+                type: TurboEvent.FallbackNavigation,
                 detail: { url: '/error-page' }
             })
         );
@@ -178,5 +179,125 @@ describe('NavigationManager', () => {
         await flushPromises();
 
         expect(callback).toHaveBeenCalled();
+    });
+
+    describe('Request Customization', () => {
+        it('should trigger beforeRequest event with default options', async () => {
+            fetchSpy.mockResolvedValueOnce(createMockResponse('<html><body>New Content</body></html>'));
+            
+            let capturedOptions: RequestInit | null = null;
+            document.addEventListener(TurboEvent.BeforeRequest, ((event: CustomEvent) => {
+                capturedOptions = event.detail.options;
+            }) as EventListener);
+
+            await navigationManager.visit('/test');
+            await flushPromises();
+
+            expect(capturedOptions).toEqual({
+                method: 'GET',
+                headers: {
+                    'Accept': 'text/html, application/xhtml+xml',
+                    'X-Requested-With': 'TurboHref'
+                },
+                credentials: 'same-origin',
+                signal: expect.any(AbortSignal)
+            });
+        });
+
+        it('should allow modifying request headers', async () => {
+            fetchSpy.mockResolvedValueOnce(createMockResponse('<html><body>New Content</body></html>'));
+            
+            document.addEventListener(TurboEvent.BeforeRequest, ((event: CustomEvent) => {
+                event.detail.setOptions({
+                    headers: {
+                        'Authorization': 'Bearer token123'
+                    }
+                });
+            }) as EventListener);
+
+            await navigationManager.visit('/test');
+            await flushPromises();
+
+            expect(fetchSpy).toHaveBeenCalledWith('/test', expect.objectContaining({
+                headers: expect.objectContaining({
+                    'Authorization': 'Bearer token123',
+                    'Accept': 'text/html, application/xhtml+xml',
+                    'X-Requested-With': 'TurboHref'
+                })
+            }));
+        });
+
+        it('should allow multiple listeners to modify options', async () => {
+            fetchSpy.mockResolvedValueOnce(createMockResponse('<html><body>New Content</body></html>'));
+            
+            // First listener adds authorization
+            document.addEventListener(TurboEvent.BeforeRequest, ((event: CustomEvent) => {
+                event.detail.setOptions({
+                    headers: {
+                        'Authorization': 'Bearer token123'
+                    }
+                });
+            }) as EventListener);
+
+            // Second listener adds custom header
+            document.addEventListener(TurboEvent.BeforeRequest, ((event: CustomEvent) => {
+                event.detail.setOptions({
+                    headers: {
+                        'X-Custom': 'value'
+                    }
+                });
+            }) as EventListener);
+
+            await navigationManager.visit('/test');
+            await flushPromises();
+
+            expect(fetchSpy).toHaveBeenCalledWith('/test', expect.objectContaining({
+                headers: expect.objectContaining({
+                    'Authorization': 'Bearer token123',
+                    'X-Custom': 'value',
+                    'Accept': 'text/html, application/xhtml+xml',
+                    'X-Requested-With': 'TurboHref'
+                })
+            }));
+        });
+
+        it('should prevent overriding the abort signal', async () => {
+            fetchSpy.mockResolvedValueOnce(createMockResponse('<html><body>New Content</body></html>'));
+            
+            const customSignal = new AbortController().signal;
+            document.addEventListener(TurboEvent.BeforeRequest, ((event: CustomEvent) => {
+                event.detail.setOptions({
+                    signal: customSignal
+                });
+            }) as EventListener);
+
+            await navigationManager.visit('/test');
+            await flushPromises();
+
+            // Verify that the fetch was called with the original signal, not our custom one
+            const fetchCall = fetchSpy.mock.calls[0][1];
+            expect(fetchCall.signal).not.toBe(customSignal);
+        });
+
+        it('should allow modifying other fetch options', async () => {
+            fetchSpy.mockResolvedValueOnce(createMockResponse('<html><body>New Content</body></html>'));
+            
+            document.addEventListener(TurboEvent.BeforeRequest, ((event: CustomEvent) => {
+                event.detail.setOptions({
+                    credentials: 'include',
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+            }) as EventListener);
+
+            await navigationManager.visit('/test');
+            await flushPromises();
+
+            expect(fetchSpy).toHaveBeenCalledWith('/test', expect.objectContaining({
+                credentials: 'include',
+                mode: 'cors',
+                cache: 'no-cache'
+            }));
+        });
     });
 }); 

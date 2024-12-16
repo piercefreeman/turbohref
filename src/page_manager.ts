@@ -1,9 +1,19 @@
+import { Events, TurboEvent } from './events';
+
+export interface UpdateOptions {
+    partialReplace?: boolean;
+    onlyKeys?: string[];
+    exceptKeys?: string[];
+}
+
 export class PageManager {
     private static readonly PERMANENT_SELECTOR = '[data-turbohref-permanent]';
     private executedScripts: Set<string> = new Set();
+    private events: Events;
 
     constructor() {
         this.trackExistingScripts();
+        this.events = new Events();
     }
 
     public async update(newDocument: Document, options: UpdateOptions = {}): Promise<void> {
@@ -13,7 +23,7 @@ export class PageManager {
             exceptKeys: options.exceptKeys
         });
 
-        this.triggerEvent('turbohref:before-render');
+        this.events.trigger(TurboEvent.BeforeRender);
 
         if (options.partialReplace) {
             console.log('Performing partial update...');
@@ -23,7 +33,7 @@ export class PageManager {
             await this.performFullUpdate(newDocument);
         }
 
-        this.triggerEvent('turbohref:render');
+        this.events.trigger(TurboEvent.Render);
         this.executeScripts();
         this.updateScrollPosition();
 
@@ -174,19 +184,4 @@ export class PageManager {
             window.scrollTo(0, 0);
         }
     }
-
-    private triggerEvent(name: string, detail: any = {}): boolean {
-        const event = new CustomEvent(name, {
-            bubbles: true,
-            cancelable: true,
-            detail
-        });
-        return document.dispatchEvent(event);
-    }
-}
-
-interface UpdateOptions {
-    partialReplace?: boolean;
-    onlyKeys?: string[];
-    exceptKeys?: string[];
 } 
